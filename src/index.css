@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #81C784;
+  --color-brand-secondary: #4DB6AC;
+  --color-bg-dark: #120D0D;
+  --color-surface-dark: #1F1717;
+  --color-border-dark: #2C2222;
+  --color-accent-green: #66BB6A;
+  --color-accent-red: #EF5350;
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", var(--font-sans);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-dark text-gray-200 font-sans antialiased;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+  
+  .btn-primary {
+    @apply px-4 py-2 bg-brand-primary text-bg-dark font-semibold rounded-lg hover:opacity-90 transition-all flex items-center gap-2;
+  }
+  
+  .btn-outline {
+    @apply px-4 py-2 border border-white/20 text-white rounded-lg hover:bg-white/5 transition-all flex items-center gap-2;
+  }
+
+  .nav-link {
+    @apply text-sm font-medium text-gray-400 hover:text-white transition-colors;
+  }
+
+  .nav-link-active {
+    @apply text-white border-b-2 border-brand-primary;
+  }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
