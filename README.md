@@ -26,8 +26,8 @@ DM Tech Online is a premium e-commerce solution designed for tech retailers. It 
 - **Order History**: Track past purchases and monitor delivery status.
 - **AI Support Center**: Integration-ready for Gemini AI to assist with customer inquiries.
 
-### Administrative Suite
-- **Inventory Control**: Comprehensive Dashboard for adding, editing, and deleting products.
+### Administrative Suite@@@ testongg
+h- **Inventory Control**: Comprehensive Dashboard for adding, editing, and deleting products.
 - **Real-time Updates**: Changes to inventory are instantly reflected across the platform.
 - **Order Management**: Oversee all customer orders and fulfillment statuses.
 - **Role-Based Access**: Secure environments for both Admins and Guests.
