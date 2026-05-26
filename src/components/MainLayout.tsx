@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
+import { ChatBot } from './ChatBot';
 
 export function MainLayout() {
   return (
@@ -11,6 +12,8 @@ export function MainLayout() {
       <footer className="py-12 border-t border-border-dark text-center text-xs font-bold text-gray-500 uppercase tracking-widest bg-bg-dark">
         &copy; 2026 DM Tech LTD. All rights Reserved.
       </footer>
+      {/* Floating AI chatbot — visible on every page */}
+      <ChatBot />
     </div>
   );
 }
