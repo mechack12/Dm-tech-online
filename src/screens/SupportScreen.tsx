@@ -2,21 +2,6 @@ import React, { useState, useRef } from 'react';
 import { Card, Button } from '../components/UI';
 import { Mail, Phone, MapPin, Globe, Send, Bot, Loader2, Sparkles, AlertCircle, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from '@google/genai';
-
-// ── Gemini client ────────────────────────────────────────────────────────────
-// Key is loaded from the .env file (GEMINI_API_KEY=...) — never hardcode it here.
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? '';
-const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
-
-// Retry helper – waits `ms` milliseconds before resolving
-const delay = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
-
-// ── System context so Gemini acts as a DM Tech support agent ─────────────────
-const SYSTEM_PROMPT = `You are a helpful AI assistant for DM Tech Online, a premium e-commerce store
-based in Kigali, Rwanda. You help customers with product questions, order issues, returns, shipping,
-and general tech support. Keep responses clear, friendly, and concise. If a question is completely
-unrelated to shopping or tech, gently steer the conversation back.`;
 
 export function SupportScreen() {
   // ── Form state ──────────────────────────────────────────────────────────────
@@ -41,82 +26,35 @@ export function SupportScreen() {
     { icon: MapPin,label: 'Headquarters',   value: 'Kigali, Rwanda',           link: '#' },
   ];
 
-  // ── Core AI call — tries multiple models, falls back automatically ───────────
-  // Models tried in order — all confirmed available on this API key
-  const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
-
-  const sendToGemini = async (fullPrompt: string) => {
-    // Guard: no API key configured
-    if (!ai) {
-      setUserQuery(fullPrompt);
-      setError(
-        'No Gemini API key found. Please add GEMINI_API_KEY=your_key to the .env file ' +
-        'in the project root, then restart the dev server. ' +
-        'Get a free key at aistudio.google.com → "Get API key".'
-      );
-      return;
-    }
-
+  // ── Call the backend proxy — the API key never leaves the server ─────────────
+  const sendToAI = async (fullPrompt: string) => {
     setIsLoading(true);
     setError('');
     setAiResponse('');
     setHasResponse(false);
     setUserQuery(fullPrompt);
 
-    let lastErr: any = null;
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: fullPrompt }),
+      });
 
-    for (const model of MODELS) {
-      try {
-        console.log(`[Gemini] Trying model: ${model}`);
-        const response = await ai.models.generateContent({
-          model,
-          contents: fullPrompt,
-          config: { systemInstruction: SYSTEM_PROMPT },
-        });
+      const data = await res.json();
 
-        const text = response.text ?? '';
-        setAiResponse(text);
+      if (!res.ok) {
+        // Server returned an error with a friendly message
+        setError(data.error ?? 'Something went wrong. Please try again.');
+      } else {
+        setAiResponse(data.text ?? '');
         setHasResponse(true);
-        lastErr = null;
-        console.log(`[Gemini] Success with model: ${model}`);
-
         setTimeout(() => {
           responseRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 150);
-        break; // success — stop trying more models
-      } catch (err: any) {
-        lastErr = err;
-        const raw: string = err?.message ?? JSON.stringify(err);
-        console.warn(`[Gemini] Model ${model} failed:`, raw);
-
-        // If it's quota/overload, wait 1s then try next model
-        const isQuota = raw.includes('quota') || raw.includes('RESOURCE_EXHAUSTED');
-        const isNotFound = raw.includes('NOT_FOUND') || raw.includes('not found');
-        if (isQuota || isNotFound) {
-          await delay(1000);
-          continue; // try next model
-        }
-        // For auth or unknown errors, stop immediately
-        break;
       }
-    }
-
-    if (lastErr) {
-      const raw: string = lastErr?.message ?? JSON.stringify(lastErr);
-      console.error('[Gemini] All models failed. Last error:', raw);
-      const isAuth  = raw.includes('API key') || raw.includes('PERMISSION_DENIED') || raw.includes('API_KEY_INVALID');
-      const isQuotaErr = raw.includes('quota') || raw.includes('RESOURCE_EXHAUSTED');
-      const isNotFoundErr = raw.includes('NOT_FOUND') || raw.includes('not found');
-      const friendly = isAuth
-          ? '🔑 Authentication failed. Your Gemini API key may have expired or been revoked. ' +
-            'Go to aistudio.google.com → "Get API key", create a NEW key, then update GEMINI_API_KEY in your .env file and restart the server.'
-          : isQuotaErr
-          ? '⚠️ Daily quota exceeded. Free Gemini keys reset every 24 hours. ' +
-            'Wait until tomorrow or generate a fresh key at aistudio.google.com and update your .env file.'
-          : isNotFoundErr
-          ? '⚠️ No AI models found for this key. Please verify your API key is valid at aistudio.google.com.'
-          : 'Something went wrong contacting the AI assistant. Please try again.';
-      setError(friendly);
+    } catch {
+      setError('Could not reach the AI assistant. Please check your internet connection and try again.');
     }
 
     setIsLoading(false);
@@ -130,7 +68,7 @@ export function SupportScreen() {
     const fullPrompt = subject.trim()
       ? `Subject: ${subject.trim()}\n\n${trimmed}`
       : trimmed;
-    await sendToGemini(fullPrompt);
+    await sendToAI(fullPrompt);
   };
 
   const handleReset = () => {
@@ -378,7 +316,7 @@ export function SupportScreen() {
                     <div className="bg-red-500/5 border border-red-500/20 rounded-xl rounded-tl-none px-5 py-4 text-sm text-red-300 leading-relaxed max-w-2xl space-y-3">
                       <p>{error}</p>
                       <button
-                        onClick={() => sendToGemini(userQuery)}
+                        onClick={() => sendToAI(userQuery)}
                         disabled={isLoading || !userQuery}
                         className="flex items-center gap-1.5 text-xs font-bold text-red-300 border border-red-400/30 rounded-lg px-3 py-1.5 hover:bg-red-500/10 transition-all disabled:opacity-50"
                       >
