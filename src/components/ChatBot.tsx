@@ -20,6 +20,7 @@ export function ChatBot() {
   const [open, setOpen]         = useState(false);
   const [input, setInput]       = useState('');
   const [isLoading, setLoading] = useState(false);
+  const [provider, setProvider]   = useState<'Gemini' | 'Grok' | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -30,6 +31,18 @@ export function ChatBot() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
+
+  // Fetch active provider on mount
+  useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(data => {
+        if (data.activeProvider && data.activeProvider !== 'None') {
+          setProvider(data.activeProvider);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
@@ -69,6 +82,9 @@ export function ChatBot() {
           { id: Date.now().toString() + '-err', role: 'bot', text: data.error ?? 'Something went wrong. Please try again.', error: true },
         ]);
       } else {
+        if (data.provider) {
+          setProvider(data.provider);
+        }
         setMessages(prev => [
           ...prev,
           { id: Date.now().toString() + '-bot', role: 'bot', text: data.text },
@@ -268,7 +284,9 @@ export function ChatBot() {
               {/* Footer */}
               <div className="px-4 pb-3 flex items-center justify-center gap-1 flex-shrink-0">
                 <Sparkles className="w-2.5 h-2.5 text-gray-600" />
-                <p className="text-[9px] text-gray-600 uppercase tracking-widest">Powered by Gemini AI</p>
+                <p className="text-[9px] text-gray-600 uppercase tracking-widest">
+                  Powered by {provider ? `${provider} AI` : 'Gemini AI'}
+                </p>
               </div>
             </div>
           </motion.div>

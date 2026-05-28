@@ -7,14 +7,16 @@ import express, { Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 
 const PORT = 3001;
-const API_KEY = process.env.GEMINI_API_KEY ?? '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? '';
+const XAI_API_KEY = process.env.XAI_API_KEY ?? '';
 
-if (!API_KEY) {
-  console.error('\n❌  GEMINI_API_KEY is not set in .env\n');
+if (!GEMINI_API_KEY && !XAI_API_KEY) {
+  console.error('\n❌  Neither GEMINI_API_KEY nor XAI_API_KEY is set in .env\n');
 }
 
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const XAI_MODELS = ['grok-2-1212', 'grok-2', 'grok-2-latest', 'grok-beta'];
 
 // ── Rich store-aware system prompt ────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are DM Bot, a friendly and knowledgeable AI assistant for DM Tech Online — a premium e-commerce store based in Kigali, Rwanda.
@@ -89,13 +91,65 @@ app.options('/api/chat', (_req, res) => res.sendStatus(200));
 
 // ── Chat endpoint ──────────────────────────────────────────────────────────────
 app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
-  const { messages } = req.body as { messages?: { role: string; text: string }[] };
+  let messages = req.body.messages as { role: string; text: string }[] | undefined;
+  const { prompt } = req.body as { prompt?: string };
+
+  // Normalize prompt payload from SupportScreen to messages structure
+  if (prompt && (!messages || messages.length === 0)) {
+    messages = [{ role: 'user', text: prompt }];
+  }
 
   if (!messages || messages.length === 0) {
-    res.status(400).json({ error: 'messages array is required' });
+    res.status(400).json({ error: 'messages or prompt is required' });
     return;
   }
 
+  // 1. Attempt xAI Grok first if XAI_API_KEY is configured
+  if (XAI_API_KEY) {
+    const xaiMessages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...messages.map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.text,
+      })),
+    ];
+
+    for (const model of XAI_MODELS) {
+      try {
+        console.log(`[xAI] Trying model: ${model}`);
+        const response = await fetch('https://api.x.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${XAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: xaiMessages,
+            temperature: 0.7,
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errText}`);
+        }
+
+        const data = await response.json() as any;
+        const text = data?.choices?.[0]?.message?.content ?? '';
+        if (text) {
+          console.log(`[xAI] ✅ Success with: ${model}`);
+          res.json({ text, provider: 'Grok' });
+          return;
+        }
+      } catch (err: unknown) {
+        console.warn(`[xAI] ⚠️  ${model} failed:`, (err as any)?.message ?? err);
+      }
+    }
+    console.warn('[xAI] All models failed or xAI API key is invalid. Falling back to Gemini...');
+  }
+
+  // 2. Fallback or primary run with Gemini
   if (!ai) {
     res.status(503).json({
       error: 'AI assistant is not configured. Please contact support.',
@@ -103,7 +157,7 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // Build full prompt with conversation history
+  // Build full prompt with conversation history for Gemini
   const history = messages
     .map(m => `${m.role === 'user' ? 'Customer' : 'DM Bot'}: ${m.text}`)
     .join('\n');
@@ -111,7 +165,7 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
 
   let lastErr: unknown = null;
 
-  for (const model of MODELS) {
+  for (const model of GEMINI_MODELS) {
     try {
       console.log(`[Gemini] Trying model: ${model}`);
       const result = await ai.models.generateContent({
@@ -122,7 +176,7 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
 
       const text = result.text ?? '';
       console.log(`[Gemini] ✅ Success with: ${model}`);
-      res.json({ text });
+      res.json({ text, provider: 'Gemini' });
       return;
     } catch (err: unknown) {
       lastErr = err;
@@ -153,10 +207,16 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', keyConfigured: !!API_KEY });
+  res.json({
+    status: 'ok',
+    geminiKeyConfigured: !!GEMINI_API_KEY,
+    xaiKeyConfigured: !!XAI_API_KEY,
+    activeProvider: XAI_API_KEY ? 'Grok' : (GEMINI_API_KEY ? 'Gemini' : 'None'),
+  });
 });
 
 app.listen(PORT, () => {
   console.log(`\n🚀  DM Tech AI proxy running on http://localhost:${PORT}`);
-  console.log(`    Gemini API key: ${API_KEY ? '✅ configured' : '❌ MISSING'}\n`);
+  console.log(`    xAI Grok API key: ${XAI_API_KEY ? '✅ configured' : '❌ MISSING'}`);
+  console.log(`    Gemini API key:   ${GEMINI_API_KEY ? '✅ configured' : '❌ MISSING'}\n`);
 });

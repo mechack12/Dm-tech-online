@@ -16,8 +16,21 @@ export function SupportScreen() {
   const [hasResponse, setHasResponse] = useState(false);
   const [error, setError]             = useState('');
   const [userQuery, setUserQuery]     = useState('');
+  const [provider, setProvider]       = useState<'Gemini' | 'Grok' | null>(null);
 
   const responseRef = useRef<HTMLDivElement>(null);
+
+  // Fetch active provider on mount
+  React.useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(data => {
+        if (data.activeProvider && data.activeProvider !== 'None') {
+          setProvider(data.activeProvider);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const contactInfo = [
     { icon: Mail,  label: 'Email Support',  value: 'dushimemechack1@gmil.com', link: 'mailto:dushimemechack1@gmil.com' },
@@ -47,6 +60,9 @@ export function SupportScreen() {
         // Server returned an error with a friendly message
         setError(data.error ?? 'Something went wrong. Please try again.');
       } else {
+        if (data.provider) {
+          setProvider(data.provider);
+        }
         setAiResponse(data.text ?? '');
         setHasResponse(true);
         setTimeout(() => {
@@ -254,7 +270,9 @@ export function SupportScreen() {
                   </div>
                   <div>
                     <p className="text-sm font-bold text-white">DM Tech AI Assistant</p>
-                    <p className="text-[10px] text-gray-500">Powered by Gemini</p>
+                    <p className="text-[10px] text-gray-500">
+                      Powered by {provider ? provider : 'Gemini'}
+                    </p>
                   </div>
                 </div>
                 {(hasResponse || error) && (
